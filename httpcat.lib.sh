@@ -28,7 +28,7 @@ code='
 	case "$line" in
 		(*` /`"$SECRET"` HTTP/`*) ;;
 		(*)
-			echo >&2 "# wrong secret"
+			echo >&2 "# a client ask with a wrong secret"
 			httpreply `Status: 403 Forbidden` ``
 			exit 2
 		;;
@@ -73,9 +73,12 @@ code='
 			nc -l -p ${port:-18081} -c "$(printf '%s\n' "$code"|tr '`' "'")"
 			ret=$?
 			case "$ret" in
-				(1) retry=$(($retry-1)); echo >&2 "restart(sleep?) ($retry)"; continue ;; # workaround to avoid nc to fail to get the same port again
-				(2) retry=$(($retry-1)); echo >&2 "restart ($retry)"; continue ;;
+				(1|2)	retry=$(($retry-1));
+					[ -z "$HTTPCAT_DEBUG" ] || echo >&2 "restart ($retry)";
+					continue
+				;;
 				(0) cat -- "$TMPFILE" ;;
+				#(10) is fatal error
 			esac
 			break
 		done
