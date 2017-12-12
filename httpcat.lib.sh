@@ -14,7 +14,7 @@ code='
 	fi
 	if [ -s "$TMPFILE" ]; then
 		echo >&2 "FATAL: file is not empty"
-		exit 1
+		exit 10
 	fi
 
 	httpreply() { printf `%s\r\n` "$@"; }
@@ -28,7 +28,7 @@ code='
 	case "$line" in
 		(*` /`"$SECRET"` HTTP/`*) ;;
 		(*)
-			echo >&2 "# wrong secret, exit"
+			echo >&2 "# wrong secret"
 			httpreply `Status: 403 Forbidden` ``
 			exit 2
 		;;
@@ -48,14 +48,14 @@ code='
 
 	if ! dd status=none ibs=1 ${len:+count=$len} "of=$TMPFILE"; then
 		echo >&2 "FATAL: dd error ?!"
-		exit 1
+		exit 10
 	fi
 	if [ -n "$x_md5sum" ]; then
 		sum="$(md5sum "$TMPFILE")"
 		sum="${sum%% *}"
 		if [ "$sum" != "$x_md5sum" ]; then
 			echo >&2 "FATAL: checksum mismatch ($sum VS $x_md5sum)"
-			exit 1
+			exit 10
 		else
 			[ -z "$HTTPCAT_DEBUG" ] || echo >&2 "OK: checksum match"
 		fi 
@@ -67,12 +67,14 @@ code='
 		echo >&2 "http://localhost:${port:-18081}/$SECRET"
 
 		local ret=0
-		while true; do
+		local retry=${HTTPCAT_MAXRETRY:-60}
+		while [ $retry -gt 0 ]; do
 			TMPFILE="$TMPFILE" SECRET="$SECRET" \
 			nc -l -p ${port:-18081} -c "$(printf '%s\n' "$code"|tr '`' "'")"
 			ret=$?
 			case "$ret" in
-				(1) continue ;;
+				(1) retry=$(($retry-1)); echo >&2 "restart(sleep?) ($retry)"; continue ;; # workaround to avoid nc to fail to get the same port again
+				(2) retry=$(($retry-1)); echo >&2 "restart ($retry)"; continue ;;
 				(0) cat -- "$TMPFILE" ;;
 			esac
 			break
